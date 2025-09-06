@@ -118,7 +118,7 @@ func TestSkipProcessed(t *testing.T) {
 	testParser := createParser(feeds)
 	testInstapaper := &instapaper{}
 	testState := state.EmptyWithPath("test")
-	testState.ProcessedItems["http://example.com/1"] = struct{}{}
+	testState.MarkProcessed("http://example.com/1")
 	processor := New(testParser, testInstapaper, testState)
 
 	err := processor.ProcessFeeds([]string{"http://example.com"})

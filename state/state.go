@@ -6,18 +6,19 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type State struct {
 	Path           string
-	ProcessedItems map[string]struct{}
+	ProcessedItems sync.Map
 	NewItems       []string
 }
 
 func EmptyWithPath(path string) *State {
 	return &State{
 		Path:           path,
-		ProcessedItems: make(map[string]struct{}),
+		ProcessedItems: sync.Map{},
 		NewItems:       make([]string, 0),
 	}
 }
@@ -50,7 +51,7 @@ func Load() (*State, error) {
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		state.ProcessedItems[scanner.Text()] = struct{}{}
+		state.MarkProcessed(scanner.Text())
 	}
 
 	return state, nil
@@ -83,11 +84,8 @@ func (s *State) Append(item string) {
 	s.NewItems = append(s.NewItems, item)
 }
 
-func (s *State) IsProcessed(link string) bool {
-	_, ok := s.ProcessedItems[link]
-	return ok
-}
-
-func (s *State) MarkProcessed(item string) {
-	s.ProcessedItems[item] = struct{}{}
+// MarkProcessed returns true if the item has not been marked before; otherwise, returns false.
+func (s *State) MarkProcessed(item string) bool {
+	_, loaded := s.ProcessedItems.LoadOrStore(item, struct{}{})
+	return !loaded
 }

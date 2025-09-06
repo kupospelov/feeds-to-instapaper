@@ -3,6 +3,7 @@ package processor
 import (
 	"log"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/kupospelov/feeds-to-instapaper/state"
@@ -32,29 +33,36 @@ func New(parser Parser, instapaper Instapaper, state *state.State) *Processor {
 }
 
 func (p *Processor) ProcessFeeds(feedURLs []string) error {
-	feeds := make([]*gofeed.Feed, 0, len(feedURLs))
+	itemsChan := make(chan *gofeed.Item)
+	var wg sync.WaitGroup
+
 	for _, feedURL := range feedURLs {
-		feed, err := p.parser.ParseURL(feedURL)
-		if err != nil {
-			log.Printf("Error parsing feed %s: %v", feedURL, err)
-			continue
-		}
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
 
-		feeds = append(feeds, feed)
-	}
-
-	items := make([]*gofeed.Item, 0)
-	for _, feed := range feeds {
-		for _, item := range feed.Items {
-			if p.state.IsProcessed(item.Link) {
-				continue
+			feed, err := p.parser.ParseURL(url)
+			if err != nil {
+				log.Printf("Error parsing feed %s: %v", url, err)
+				return
 			}
 
-			p.state.MarkProcessed(item.Link)
-			items = append(items, item)
-		}
+			for _, item := range feed.Items {
+				if p.state.MarkProcessed(item.Link) {
+					itemsChan <- item
+				}
+			}
+		}(feedURL)
 	}
+	go func() {
+		wg.Wait()
+		close(itemsChan)
+	}()
 
+	items := make([]*gofeed.Item, 0)
+	for item := range itemsChan {
+		items = append(items, item)
+	}
 	slices.SortFunc(items, func(a, b *gofeed.Item) int {
 		var atime time.Time
 		if a.PublishedParsed != nil {
