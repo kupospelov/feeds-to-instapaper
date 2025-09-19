@@ -1,0 +1,10 @@
+[Unit]
+Description=Run feeds-to-instapaper
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=feeds-to-instapaper
+
+[Install]
+WantedBy=default.target
