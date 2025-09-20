@@ -8,14 +8,27 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+type Instapaper struct {
+	Username string `toml:"username"`
+	Password string `toml:"password"`
+}
+
+type Hooks struct {
+	NewArticle []Hook `toml:"new_article"`
+}
+
+type Hook struct {
+	Spawn []string `toml:"spawn"`
+}
+
+type Feeds struct {
+	URLs []string `toml:"urls"`
+}
+
 type Config struct {
-	Instapaper struct {
-		Username string `toml:"username"`
-		Password string `toml:"password"`
-	} `toml:"instapaper"`
-	Feeds struct {
-		URLs []string `toml:"urls"`
-	} `toml:"feeds"`
+	Instapaper `toml:"instapaper"`
+	Hooks      `toml:"hooks"`
+	Feeds      `toml:"feeds"`
 }
 
 func Load() (*Config, error) {

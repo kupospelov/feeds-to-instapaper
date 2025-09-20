@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/kupospelov/feeds-to-instapaper/config"
+	"github.com/kupospelov/feeds-to-instapaper/hooks"
 	"github.com/kupospelov/feeds-to-instapaper/instapaper"
 	"github.com/kupospelov/feeds-to-instapaper/processor"
 	"github.com/kupospelov/feeds-to-instapaper/state"
@@ -54,7 +55,13 @@ func main() {
 
 	parser := gofeed.NewParser()
 	instapaper := instapaper.New(config.Instapaper.Username, config.Instapaper.Password)
-	proc := processor.New(parser, instapaper, state)
+
+	hooks, err := hooks.New(config.Hooks)
+	if err != nil {
+		log.Fatalf("Failed to create hooks: %v", err)
+	}
+
+	proc := processor.New(parser, instapaper, hooks, state)
 
 	err = proc.ProcessFeeds(config.Feeds.URLs)
 	if err != nil {

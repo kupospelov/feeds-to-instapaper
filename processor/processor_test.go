@@ -43,6 +43,47 @@ func (i *instapaper) Add(link, title string) error {
 	return nil
 }
 
+func (i *instapaper) assertAddedItems(t *testing.T, expected []addedItem) {
+	if got, want := len(i.addedItems), len(expected); got != want {
+		t.Errorf("len(addedItems)=%d, want=%d", got, want)
+	}
+	for j := range len(expected) {
+		if got, want := i.addedItems[j].link, expected[j].link; got != want {
+			t.Errorf("addedItems[%d].link=%s, want=%s", j, got, want)
+		}
+		if got, want := i.addedItems[j].title, expected[j].title; got != want {
+			t.Errorf("addedItems[%d].title=%s, want=%s", j, got, want)
+		}
+	}
+}
+
+type hooks struct {
+	newArticles []newArticle
+}
+
+type newArticle struct {
+	feedTitle string
+	itemTitle string
+}
+
+func (h *hooks) NewArticle(feed *gofeed.Feed, item *gofeed.Item) {
+	h.newArticles = append(h.newArticles, newArticle{feedTitle: feed.Title, itemTitle: item.Title})
+}
+
+func (h *hooks) assertNewArticles(t *testing.T, expected []newArticle) {
+	if got, want := len(h.newArticles), len(expected); got != want {
+		t.Errorf("len(newArticles)=%d, want=%d", got, want)
+	}
+	for i := range len(expected) {
+		if got, want := h.newArticles[i].feedTitle, expected[i].feedTitle; got != want {
+			t.Errorf("newArticles[%d].feedTitle=%s, want=%s", i, got, want)
+		}
+		if got, want := h.newArticles[i].itemTitle, expected[i].itemTitle; got != want {
+			t.Errorf("newArticles[%d].itemTitle=%s, want=%s", i, got, want)
+		}
+	}
+}
+
 func parseTime(t string) *time.Time {
 	timestamp, _ := time.Parse(time.Kitchen, t)
 	return &timestamp
@@ -58,10 +99,22 @@ func createParser(feeds []*gofeed.Feed) Parser {
 	return p
 }
 
+func assertNewStateItems(t *testing.T, s *state.State, expected []string) {
+	if got, want := len(s.NewItems), len(expected); got != want {
+		t.Errorf("len(newItems)=%d, want=%d", got, want)
+	}
+	for i := range len(expected) {
+		if got, want := s.NewItems[i], expected[i]; got != want {
+			t.Errorf("newItems[%d]=%s, want=%s", i, got, want)
+		}
+	}
+}
+
 func TestSuccess(t *testing.T) {
 	feeds := []*gofeed.Feed{
 		{
-			Link: "http://example.com",
+			Title: "Feed 1 Title",
+			Link:  "http://example.com",
 			Items: []*gofeed.Item{
 				{Link: "http://example.com/1", Title: "Article 1", PublishedParsed: parseTime("3:00PM")},
 				{Link: "http://example.com/3", Title: "Article 3"},
@@ -72,43 +125,36 @@ func TestSuccess(t *testing.T) {
 	testParser := createParser(feeds)
 	testInstapaper := &instapaper{}
 	testState := state.EmptyWithPath("test")
-	processor := New(testParser, testInstapaper, testState)
+	testHooks := &hooks{}
+	processor := New(testParser, testInstapaper, testHooks, testState)
 
 	err := processor.ProcessFeeds([]string{"http://example.com"})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
-	if got, want := len(testInstapaper.addedItems), 3; got != want {
-		t.Errorf("len(addedItems)=%d, want=%d", got, want)
-	}
-	if got, want := len(testState.NewItems), 3; got != want {
-		t.Errorf("len(newItems)=%d, want=%d", got, want)
-	}
-	expectedItems := []struct {
-		link, title string
-	}{
+	testInstapaper.assertAddedItems(t, []addedItem{
 		{"http://example.com/1", "Article 1"},
 		{"http://example.com/2", "Article 2"},
 		{"http://example.com/3", "Article 3"},
-	}
-	for i := range 3 {
-		if got, want := testInstapaper.addedItems[i].link, expectedItems[i].link; got != want {
-			t.Errorf("addedItems[%d].link=%s, want=%s", i, got, want)
-		}
-		if got, want := testInstapaper.addedItems[i].title, expectedItems[i].title; got != want {
-			t.Errorf("addedItems[%d].title=%s, want=%s", i, got, want)
-		}
-		if got, want := testState.NewItems[i], expectedItems[i].link; got != want {
-			t.Errorf("addedItems[%d].title=%s, want=%s", i, got, want)
-		}
-	}
+	})
+	testHooks.assertNewArticles(t, []newArticle{
+		{"Feed 1 Title", "Article 1"},
+		{"Feed 1 Title", "Article 2"},
+		{"Feed 1 Title", "Article 3"},
+	})
+	assertNewStateItems(t, testState, []string{
+		"http://example.com/1",
+		"http://example.com/2",
+		"http://example.com/3",
+	})
 }
 
 func TestSkipProcessed(t *testing.T) {
 	feeds := []*gofeed.Feed{
 		{
-			Link: "http://example.com",
+			Title: "Feed 1 Title",
+			Link:  "http://example.com",
 			Items: []*gofeed.Item{
 				{Link: "http://example.com/1", Title: "Already processed"},
 				{Link: "http://example.com/2", Title: "New article"},
@@ -119,31 +165,30 @@ func TestSkipProcessed(t *testing.T) {
 	testInstapaper := &instapaper{}
 	testState := state.EmptyWithPath("test")
 	testState.MarkProcessed("http://example.com/1")
-	processor := New(testParser, testInstapaper, testState)
+	testHooks := &hooks{}
+	processor := New(testParser, testInstapaper, testHooks, testState)
 
 	err := processor.ProcessFeeds([]string{"http://example.com"})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
-	if got, want := len(testInstapaper.addedItems), 1; got != want {
-		t.Errorf("len(addedItems)=%d, want=%d", got, want)
-	}
-	if got, want := testInstapaper.addedItems[0].link, "http://example.com/2"; got != want {
-		t.Errorf("addedItems[0].link=%s, want=%s", got, want)
-	}
-	if got, want := len(testState.NewItems), 1; got != want {
-		t.Errorf("len(newItems)=%d, want=%d", got, want)
-	}
-	if got, want := testState.NewItems[0], "http://example.com/2"; got != want {
-		t.Errorf("addedItems[0].link=%s, want=%s", got, want)
-	}
+	testInstapaper.assertAddedItems(t, []addedItem{
+		{"http://example.com/2", "New article"},
+	})
+	testHooks.assertNewArticles(t, []newArticle{
+		{"Feed 1 Title", "New article"},
+	})
+	assertNewStateItems(t, testState, []string{
+		"http://example.com/2",
+	})
 }
 
 func TestParserError(t *testing.T) {
 	feeds := []*gofeed.Feed{
 		{
-			Link: "http://example.com",
+			Title: "Feed 1 Title",
+			Link:  "http://example.com",
 			Items: []*gofeed.Item{
 				{Link: "http://example.com/1", Title: "Article 1"},
 			},
@@ -152,31 +197,30 @@ func TestParserError(t *testing.T) {
 	testParser := createParser(feeds)
 	testInstapaper := &instapaper{}
 	testState := state.EmptyWithPath("test")
-	processor := New(testParser, testInstapaper, testState)
+	testHooks := &hooks{}
+	processor := New(testParser, testInstapaper, testHooks, testState)
 
 	err := processor.ProcessFeeds([]string{"http://example.com", "http://error.com"})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
-	if got, want := len(testInstapaper.addedItems), 1; got != want {
-		t.Errorf("len(addedItems)=%d, want=%d", got, want)
-	}
-	if got, want := testInstapaper.addedItems[0].link, "http://example.com/1"; got != want {
-		t.Errorf("addedItems[0].link=%s, want=%s", got, want)
-	}
-	if got, want := len(testState.NewItems), 1; got != want {
-		t.Errorf("len(newItems)=%d, want=%d", got, want)
-	}
-	if got, want := testState.NewItems[0], "http://example.com/1"; got != want {
-		t.Errorf("addedItems[0].link=%s, want=%s", got, want)
-	}
+	testInstapaper.assertAddedItems(t, []addedItem{
+		{"http://example.com/1", "Article 1"},
+	})
+	testHooks.assertNewArticles(t, []newArticle{
+		{"Feed 1 Title", "Article 1"},
+	})
+	assertNewStateItems(t, testState, []string{
+		"http://example.com/1",
+	})
 }
 
 func TestInstapaperError(t *testing.T) {
 	feeds := []*gofeed.Feed{
 		{
-			Link: "http://example.com",
+			Title: "Feed 1 Title",
+			Link:  "http://example.com",
 			Items: []*gofeed.Item{
 				{Link: "http://example.com/1", Title: "Article 1"},
 				{Link: "http://example.com/2", Title: "Article 2"},
@@ -186,23 +230,21 @@ func TestInstapaperError(t *testing.T) {
 	testParser := createParser(feeds)
 	testInstapaper := &instapaper{err: map[string]error{"http://example.com/1": errors.New("API error")}}
 	testState := state.EmptyWithPath("test")
-	processor := New(testParser, testInstapaper, testState)
+	testHooks := &hooks{}
+	processor := New(testParser, testInstapaper, testHooks, testState)
 
 	err := processor.ProcessFeeds([]string{"http://example.com"})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
-	if got, want := len(testInstapaper.addedItems), 1; got != want {
-		t.Errorf("len(addedItems)=%d, want=%d", got, want)
-	}
-	if got, want := testInstapaper.addedItems[0].link, "http://example.com/2"; got != want {
-		t.Errorf("addedItems[0].link=%s, want=%s", got, want)
-	}
-	if got, want := len(testState.NewItems), 1; got != want {
-		t.Errorf("len(newItems)=%d, want=%d", got, want)
-	}
-	if got, want := testState.NewItems[0], "http://example.com/2"; got != want {
-		t.Errorf("addedItems[0].link=%s, want=%s", got, want)
-	}
+	testInstapaper.assertAddedItems(t, []addedItem{
+		{"http://example.com/2", "Article 2"},
+	})
+	testHooks.assertNewArticles(t, []newArticle{
+		{"Feed 1 Title", "Article 2"},
+	})
+	assertNewStateItems(t, testState, []string{
+		"http://example.com/2",
+	})
 }
