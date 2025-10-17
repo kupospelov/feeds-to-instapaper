@@ -126,7 +126,7 @@ func TestSuccess(t *testing.T) {
 	testInstapaper := &instapaper{}
 	testState := state.EmptyWithPath("test")
 	testHooks := &hooks{}
-	processor := New(testParser, testInstapaper, testHooks, testState)
+	processor := New(testParser, testInstapaper, testHooks, testState, false)
 
 	err := processor.ProcessFeeds([]string{"http://example.com"})
 	if err != nil {
@@ -166,7 +166,7 @@ func TestSkipProcessed(t *testing.T) {
 	testState := state.EmptyWithPath("test")
 	testState.MarkProcessed("http://example.com/1")
 	testHooks := &hooks{}
-	processor := New(testParser, testInstapaper, testHooks, testState)
+	processor := New(testParser, testInstapaper, testHooks, testState, false)
 
 	err := processor.ProcessFeeds([]string{"http://example.com"})
 	if err != nil {
@@ -198,7 +198,7 @@ func TestParserError(t *testing.T) {
 	testInstapaper := &instapaper{}
 	testState := state.EmptyWithPath("test")
 	testHooks := &hooks{}
-	processor := New(testParser, testInstapaper, testHooks, testState)
+	processor := New(testParser, testInstapaper, testHooks, testState, false)
 
 	err := processor.ProcessFeeds([]string{"http://example.com", "http://error.com"})
 	if err != nil {
@@ -231,7 +231,7 @@ func TestInstapaperError(t *testing.T) {
 	testInstapaper := &instapaper{err: map[string]error{"http://example.com/1": errors.New("API error")}}
 	testState := state.EmptyWithPath("test")
 	testHooks := &hooks{}
-	processor := New(testParser, testInstapaper, testHooks, testState)
+	processor := New(testParser, testInstapaper, testHooks, testState, false)
 
 	err := processor.ProcessFeeds([]string{"http://example.com"})
 	if err != nil {
@@ -247,4 +247,35 @@ func TestInstapaperError(t *testing.T) {
 	assertNewStateItems(t, testState, []string{
 		"http://example.com/2",
 	})
+}
+
+func TestDryRun(t *testing.T) {
+	feeds := []*gofeed.Feed{
+		{
+			Title: "Feed 1 Title",
+			Link:  "http://example.com",
+			Items: []*gofeed.Item{
+				{Link: "http://example.com/1", Title: "Article 1"},
+				{Link: "http://example.com/2", Title: "Article 2"},
+			},
+		},
+	}
+	testParser := createParser(feeds)
+	testInstapaper := &instapaper{}
+	testState := state.EmptyWithPath("test")
+	testState.MarkProcessed("http://example.com/1")
+	testHooks := &hooks{}
+	processor := New(testParser, testInstapaper, testHooks, testState, true)
+
+	err := processor.ProcessFeeds([]string{"http://example.com"})
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	testInstapaper.assertAddedItems(t, []addedItem{})
+	testHooks.assertNewArticles(t, []newArticle{})
+	assertNewStateItems(t, testState, []string{})
+	if testState.MarkProcessed("http://example.com/2") {
+		t.Errorf("Expected 'http://example.com/2' to have been marked as processed")
+	}
 }

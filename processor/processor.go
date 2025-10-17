@@ -27,18 +27,24 @@ type Processor struct {
 	instapaper Instapaper
 	hooks      Hooks
 	state      *state.State
+	dryRun     bool
 }
 
-func New(parser Parser, instapaper Instapaper, hooks Hooks, state *state.State) *Processor {
+func New(parser Parser, instapaper Instapaper, hooks Hooks, state *state.State, dryRun bool) *Processor {
 	return &Processor{
 		parser:     parser,
 		instapaper: instapaper,
 		hooks:      hooks,
 		state:      state,
+		dryRun:     dryRun,
 	}
 }
 
 func (p *Processor) ProcessFeeds(feedURLs []string) error {
+	if p.dryRun {
+		log.Printf("Running in dry run mode")
+	}
+
 	type feedItem struct {
 		feed *gofeed.Feed
 		item *gofeed.Item
@@ -86,7 +92,11 @@ func (p *Processor) ProcessFeeds(feedURLs []string) error {
 	})
 
 	for _, fi := range feedItems {
-		log.Printf("Adding to Instapaper: %s", fi.item.Title)
+		log.Printf("New link: %s", fi.item.Link)
+		if p.dryRun {
+			continue
+		}
+
 		err := p.instapaper.Add(fi.item.Link, fi.item.Title)
 		if err != nil {
 			log.Printf("Error adding link %s: %v", fi.item.Link, err)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -40,6 +41,9 @@ func scheduleSave(state *state.State) func() {
 func main() {
 	log.SetFlags(0)
 
+	var dryRun = flag.Bool("dry-run", false, "Only fetch and print new feeds")
+	flag.Parse()
+
 	config, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
@@ -50,8 +54,10 @@ func main() {
 		log.Fatalf("Failed to load state: %v", err)
 	}
 
-	save := scheduleSave(state)
-	defer save()
+	if !*dryRun {
+		save := scheduleSave(state)
+		defer save()
+	}
 
 	parser := gofeed.NewParser()
 	instapaper := instapaper.New(config.Instapaper.Username, config.Instapaper.Password)
@@ -61,7 +67,7 @@ func main() {
 		log.Fatalf("Failed to create hooks: %v", err)
 	}
 
-	proc := processor.New(parser, instapaper, hooks, state)
+	proc := processor.New(parser, instapaper, hooks, state, *dryRun)
 
 	err = proc.ProcessFeeds(config.Feeds.URLs)
 	if err != nil {
