@@ -53,10 +53,19 @@ func New(hooks config.Hooks) (*Hooks, error) {
 }
 
 func (h *Hooks) NewArticle(feed *gofeed.Feed, item *gofeed.Item) {
-	templateData := map[string]string{
-		"Title":     item.Title,
-		"FeedTitle": feed.Title,
-		"FeedLink":  strings.TrimSuffix(feed.Link, "/"),
+	type FeedTemplate struct {
+		Title string
+		Link  string
+	}
+	type ItemTemplate struct {
+		Title string
+		Feed  FeedTemplate
+	}
+	templateData := ItemTemplate{
+		Title: item.Title,
+		Feed: FeedTemplate{
+			Title: feed.Title,
+			Link:  strings.TrimSuffix(feed.Link, "/")},
 	}
 	for _, hook := range h.newArticle {
 		args := make([]string, len(hook.argTemplates))
