@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"strings"
 	"text/template"
 	"time"
 
@@ -55,6 +56,7 @@ func (h *Hooks) NewArticle(feed *gofeed.Feed, item *gofeed.Item) {
 	templateData := map[string]string{
 		"Title":     item.Title,
 		"FeedTitle": feed.Title,
+		"FeedLink":  strings.TrimSuffix(feed.Link, "/"),
 	}
 	for _, hook := range h.newArticle {
 		args := make([]string, len(hook.argTemplates))

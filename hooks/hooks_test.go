@@ -17,7 +17,7 @@ func TestSuccess(t *testing.T) {
 	conf := config.Hooks{
 		NewArticle: []config.Hook{
 			{
-				Spawn: []string{"sh", "-c", fmt.Sprintf("echo -n {{.FeedTitle}}, {{.Title}} > %s", file)},
+				Spawn: []string{"sh", "-c", fmt.Sprintf("echo -n {{.FeedTitle}}, {{.FeedLink}}, {{.Title}} > %s", file)},
 			},
 		},
 	}
@@ -28,7 +28,7 @@ func TestSuccess(t *testing.T) {
 
 	item := &gofeed.Item{Link: "http://example.com/1", Title: "Article 1"}
 	feed := &gofeed.Feed{
-		Link:  "http://example.com",
+		Link:  "http://example.com/",
 		Title: "Feed Title",
 		Items: []*gofeed.Item{item},
 	}
@@ -38,7 +38,7 @@ func TestSuccess(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to read output file: %v", err)
 	}
-	if got, want := string(content), "Feed Title, Article 1"; got != want {
+	if got, want := string(content), "Feed Title, http://example.com, Article 1"; got != want {
 		t.Errorf("got %s, want %s", got, want)
 	}
 }
