@@ -24,10 +24,19 @@ urls = [
 ]
 ```
 
+## Building
+
+Dependencies:
+* Go
+* make
+* scdoc (optional, for man pages)
+
+Run `make`.
+
 ## Usage
 
 Run `feeds-to-instapaper`.
 
-You can use cron or systemd timers to schedule the runs. Check out the [examples](https://github.com/kupospelov/feeds-to-instapaper/tree/main/examples/systemd).
+You can use cron or systemd timers to schedule the runs. Check out the [examples](https://github.com/kupospelov/feeds-to-instapaper/tree/main/doc/systemd).
 
 The application writes a state file at `~/.local/state/feeds-to-instapaper/added` to keep track of previously processed articles.
